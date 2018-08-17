@@ -351,6 +351,16 @@ function renderPages(pages, fontProvider, pdfKitDoc, progressCallback) {
 	}
 }
 
+function beginClip(rect, pdfKitDoc) {
+  pdfKitDoc.save();
+  pdfKitDoc.addContent('' + rect.x + ' ' + rect.y + ' ' + rect.width + ' ' + rect.height + ' re');
+  pdfKitDoc.clip();
+}
+
+function endClip(pdfKitDoc) {
+  pdfKitDoc.restore();
+}
+
 function renderLine(line, x, y, pdfKitDoc) {
 	if (line._pageNodeRef) {
 		var newWidth;

@@ -32,10 +32,12 @@ TextTools.prototype.buildInlines = function (textArray, styleContextStack) {
 
 	var minWidth = 0,
 		maxWidth = 0,
+		height = 0,
 		currentLineWidth;
 
 	measured.forEach(function (inline) {
 		minWidth = Math.max(minWidth, inline.width - inline.leadingCut - inline.trailingCut);
+		height = Math.max(height, inline.height);
 
 		if (!currentLineWidth) {
 			currentLineWidth = {width: 0, leadingCut: inline.leadingCut, trailingCut: 0};
@@ -58,7 +60,8 @@ TextTools.prototype.buildInlines = function (textArray, styleContextStack) {
 	return {
 		items: measured,
 		minWidth: minWidth,
-		maxWidth: maxWidth
+		maxWidth: maxWidth,
+		height: height
 	};
 
 	function getTrimmedWidth(item) {

@@ -4116,10 +4116,12 @@ TextTools.prototype.buildInlines = function (textArray, styleContextStack) {
 
 	var minWidth = 0,
 		maxWidth = 0,
+		height = 0,
 		currentLineWidth;
 
 	measured.forEach(function (inline) {
 		minWidth = Math.max(minWidth, inline.width - inline.leadingCut - inline.trailingCut);
+		height = Math.max(height, inline.height);
 
 		if (!currentLineWidth) {
 			currentLineWidth = {width: 0, leadingCut: inline.leadingCut, trailingCut: 0};
@@ -4142,7 +4144,8 @@ TextTools.prototype.buildInlines = function (textArray, styleContextStack) {
 	return {
 		items: measured,
 		minWidth: minWidth,
-		maxWidth: maxWidth
+		maxWidth: maxWidth,
+		height: height
 	};
 
 	function getTrimmedWidth(item) {
@@ -8443,31 +8446,33 @@ DocumentContext.prototype.saveContextInEndingCell = function (endingCell) {
 	};
 };
 
-DocumentContext.prototype.completeColumnGroup = function (height) {
+DocumentContext.prototype.completeColumnGroup = function (height, clipCells) {
 	var saved = this.snapshots.pop();
 
 	this.calculateBottomMost(saved);
 
 	this.endingCell = null;
 	this.x = saved.x;
+	var actualHeight = saved.bottomMost.y;
 
-	var y = saved.bottomMost.y;
 	if (height) {
-		if (saved.page === saved.bottomMost.page) {
-			if ((saved.y + height) > y) {
-				y = saved.y + height;
+		if (saved.page == saved.bottomMost.page) {
+			if (clipCells) {
+				actualHeight = saved.y + height;
+			} else if ((saved.y + height) > saved.bottomMost.y) {
+					actualHeight = saved.y + height;
 			}
 		} else {
-			y += height;
+			actualHeight += height;
 		}
 	}
 
-	this.y = y;
+	this.y = actualHeight;
 	this.page = saved.bottomMost.page;
 	this.availableWidth = saved.availableWidth;
 	this.availableHeight = saved.bottomMost.availableHeight;
 	if (height) {
-		this.availableHeight -= (y - saved.bottomMost.y);
+		this.availableHeight -= (actualHeight - saved.bottomMost.y);
 	}
 	this.lastColumnWidth = saved.lastColumnWidth;
 };
@@ -13610,6 +13615,16 @@ function renderPages(pages, fontProvider, pdfKitDoc, progressCallback) {
 	}
 }
 
+function beginClip(rect, pdfKitDoc) {
+  pdfKitDoc.save();
+  pdfKitDoc.addContent('' + rect.x + ' ' + rect.y + ' ' + rect.width + ' ' + rect.height + ' re');
+  pdfKitDoc.clip();
+}
+
+function endClip(pdfKitDoc) {
+  pdfKitDoc.restore();
+}
+
 function renderLine(line, x, y, pdfKitDoc) {
 	if (line._pageNodeRef) {
 		var newWidth;
@@ -14320,7 +14335,7 @@ LayoutBuilder.prototype.processColumns = function (columnNode) {
 	}
 };
 
-LayoutBuilder.prototype.processRow = function (columns, widths, gaps, tableBody, tableRow, height) {
+LayoutBuilder.prototype.processRow = function (columns, widths, gaps, tableBody, tableRow, height, clipCells) {
 	var self = this;
 	var pageBreaks = [], positions = [];
 
@@ -14342,15 +14357,21 @@ LayoutBuilder.prototype.processRow = function (columns, widths, gaps, tableBody,
 
 			self.writer.context().beginColumn(width, leftOffset, getEndingCell(column, i));
 			if (!column._span) {
+				if (clipCells && height) {
+					self.writer.beginClip(width, height);
+				}
 				self.processNode(column);
 				addAll(positions, column.positions);
+				if (clipCells && height) {
+					self.writer.endClip();
+				}
 			} else if (column._columnEndingContext) {
 				// row-span ending
 				self.writer.context().markEnding(column);
 			}
 		}
 
-		self.writer.context().completeColumnGroup(height);
+		self.writer.context().completeColumnGroup(height, clipCells);
 	});
 
 	return {pageBreaks: pageBreaks, positions: positions};
@@ -14441,25 +14462,26 @@ LayoutBuilder.prototype.processTable = function (tableNode) {
 	var processor = new TableProcessor(tableNode);
 
 	processor.beginTable(this.writer);
-
 	var rowHeights = tableNode.table.heights;
+
 	for (var i = 0, l = tableNode.table.body.length; i < l; i++) {
-		processor.beginRow(i, this.writer);
+		processor.beginRow(i, this.writer, tableNode.table.heights);
 
 		var height;
-		if (isFunction(rowHeights)) {
+		if (typeof rowHeights === 'function') {
 			height = rowHeights(i);
-		} else if (isArray(rowHeights)) {
+		} else if (rowHeights && rowHeights.length) {
 			height = rowHeights[i];
+			if (typeof height === 'object') height = height.height;
 		} else {
 			height = rowHeights;
 		}
 
-		if (height === 'auto') {
+		if (height == 'auto') {
 			height = undefined;
 		}
 
-		var result = this.processRow(tableNode.table.body[i], tableNode.table.widths, tableNode._offsets.offsets, tableNode.table.body, i, height);
+		var result = this.processRow(tableNode.table.body[i], tableNode.table.widths, tableNode._offsets.offsets, tableNode.table.body, i, height, tableNode.table.clipCells);
 		addAll(tableNode.positions, result.positions);
 
 		processor.endRow(i, this.writer, result.pageBreaks);
@@ -15013,6 +15035,7 @@ DocMeasure.prototype.measureLeaf = function (node) {
 	node._inlines = data.items;
 	node._minWidth = data.minWidth;
 	node._maxWidth = data.maxWidth;
+	node._height = data.height;
 
 	return node;
 };
@@ -15320,7 +15343,8 @@ DocMeasure.prototype.measureColumns = function (node) {
 };
 
 DocMeasure.prototype.measureTable = function (node) {
-	extendTableWidths(node);
+	extendTableDimensions(node, 'widths');
+	extendTableDimensions(node, 'heights');
 	node._layout = getLayout(this.tableLayouts);
 	node._offsets = getOffsets(node._layout);
 
@@ -15357,6 +15381,19 @@ DocMeasure.prototype.measureTable = function (node) {
 
 			if (data.rowSpan && data.rowSpan > 1) {
 				markVSpans(node.table, row, col, data.rowSpan);
+			}
+		}
+	}
+
+	for (row = 0, rows = node.table.body.length; row < rows; row++) {
+		var r = node.table.body[row];
+		var c = node.table.heights[row];
+		c._height = 0;
+		for (col = 0, cols = r.length; col < cols; col++) {
+			if (!r[col]._span) {
+				c._height = Math.max(c._height, r[col]._height);
+			} else {
+				c._height = 0;
 			}
 		}
 	}
@@ -15501,23 +15538,26 @@ DocMeasure.prototype.measureTable = function (node) {
 		}
 	}
 
-	function extendTableWidths(node) {
-		if (!node.table.widths) {
-			node.table.widths = 'auto';
+	function extendTableDimensions(node, dimension) {
+		if (!node.table[dimension]) {
+			node.table[dimension] = 'auto';
 		}
 
-		if (isString(node.table.widths)) {
-			node.table.widths = [node.table.widths];
-
-			while (node.table.widths.length < node.table.body[0].length) {
-				node.table.widths.push(node.table.widths[node.table.widths.length - 1]);
-			}
+		if (typeof node.table[dimension] === 'string' || node.table[dimension] instanceof String) {
+			node.table[dimension] = [node.table[dimension]];
 		}
 
-		for (var i = 0, l = node.table.widths.length; i < l; i++) {
-			var w = node.table.widths[i];
-			if (isNumber(w) || isString(w)) {
-				node.table.widths[i] = {width: w};
+		var n = (dimension == 'widths') ? node.table.body[0].length : node.table.body.length;
+		while (node.table[dimension].length < n) {
+			node.table[dimension].push(node.table[dimension][node.table[dimension].length - 1]);
+		}
+
+		for (var i = 0, l = node.table[dimension].length; i < l; i++) {
+			var w = node.table[dimension][i];
+			if (typeof w === 'number' || w instanceof Number || typeof w === 'string' || w instanceof String) {
+				var x = {};
+				x[dimension.substring(0, dimension.length - 1)] = w;
+				node.table[dimension][i] = x;
 			}
 		}
 	}
@@ -16658,7 +16698,15 @@ PageElementWriter.prototype.addQr = function (qr, index) {
 	});
 };
 
-PageElementWriter.prototype.addVector = function (vector, ignoreContextX, ignoreContextY, index) {
+PageElementWriter.prototype.beginClip = function(width, height) {
+	return this.writer.beginClip(width, height);
+};
+
+PageElementWriter.prototype.endClip = function() {
+	return this.writer.endClip();
+};
+
+PageElementWriter.prototype.addVector = function(vector, ignoreContextX, ignoreContextY, index) {
 	return this.writer.addVector(vector, ignoreContextX, ignoreContextY, index);
 };
 
@@ -17064,6 +17112,25 @@ ElementWriter.prototype.addFragment = function (block, useBlockXOffset, useBlock
 	return true;
 };
 
+ElementWriter.prototype.beginClip = function (width, height) {
+	var ctx = this.context;
+	var page = ctx.getCurrentPage();
+	page.items.push({
+		type: 'beginClip',
+		item: { x: ctx.x, y: ctx.y, width: width, height: height }
+	});
+	return true;
+};
+
+ElementWriter.prototype.endClip = function () {
+	var ctx = this.context;
+	var page = ctx.getCurrentPage();
+	page.items.push({
+		type: 'endClip'
+	});
+	return true;
+};
+
 /**
  * Pushes the provided context onto the stack or creates a new one
  *
@@ -17138,7 +17205,11 @@ TableProcessor.prototype.beginTable = function (writer) {
 	// update the border properties of all cells before drawing any lines
 	prepareCellBorders(this.tableNode.table.body);
 
-	this.drawHorizontalLine(0, writer);
+	var rowPaddingTop = this.layout.hLineWidth(0, this.tableNode);
+	var rowHeight = this.tableNode.table.heights[0]._height;
+	if (rowPaddingTop + rowHeight < writer.context().availableHeight) {
+		this.drawHorizontalLine(0, writer);
+	}
 
 	function getTableInnerContentWidth() {
 		var width = 0;
@@ -17230,7 +17301,7 @@ TableProcessor.prototype.onRowBreak = function (rowIndex, writer) {
 	};
 };
 
-TableProcessor.prototype.beginRow = function (rowIndex, writer) {
+TableProcessor.prototype.beginRow = function (rowIndex, writer, heights) {
 	this.topLineWidth = this.layout.hLineWidth(rowIndex, this.tableNode);
 	this.rowPaddingTop = this.layout.paddingTop(rowIndex, this.tableNode);
 	this.bottomLineWidth = this.layout.hLineWidth(rowIndex + 1, this.tableNode);
@@ -17243,6 +17314,19 @@ TableProcessor.prototype.beginRow = function (rowIndex, writer) {
 	}
 	this.rowTopY = writer.context().y;
 	this.reservedAtBottom = this.bottomLineWidth + this.rowPaddingBottom;
+	if (typeof heights !== 'undefined') {
+		var h;
+		if (typeof heights === 'function') {
+			h = heights(rowIndex);
+		} else if (heights.length) {
+			h = heights[rowIndex].height;
+		} else {
+			h = heights;
+		}
+		if (h !== 'auto') {
+			this.reservedAtBottom += h;
+		}
+	}
 
 	writer.context().availableHeight -= this.reservedAtBottom;
 
@@ -49979,8 +50063,7 @@ function groupDecorations(line) {
 		for (var ii = 0, ll = decoration.length; ii < ll; ii++) {
 			var decorationItem = decoration[ii];
 			if (!currentGroup || decorationItem !== currentGroup.decoration ||
-				style !== currentGroup.decorationStyle || color !== currentGroup.decorationColor ||
-				decorationItem === 'lineThrough') {
+				style !== currentGroup.decorationStyle || color !== currentGroup.decorationColor) {
 
 				currentGroup = {
 					line: line,
@@ -50011,7 +50094,8 @@ function drawDecoration(group, x, y, pdfKitDoc) {
 	function width() {
 		var sum = 0;
 		for (var i = 0, l = group.inlines.length; i < l; i++) {
-			sum += group.inlines[i].width;
+			var justifyShift = (group.inlines[i].justifyShift || 0);
+			sum += group.inlines[i].width + justifyShift;
 		}
 		return sum;
 	}
