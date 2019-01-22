@@ -515,6 +515,20 @@ LayoutBuilder.prototype.processRow = function (columns, widths, gaps, tableBody,
 		if (!pageDesc) {
 			pageDesc = data;
 			pageBreaks.push(pageDesc);
+
+			// Update snapshot when page changed
+			var context = self.writer.context();
+			var lastSnapshot = context.snapshots[context.snapshots.length - 1];
+			context.snapshots.push({
+				page: context.page,
+				x: lastSnapshot.x,
+				y: context.y,
+				bottomMost: {
+					page: context.page,
+					x: lastSnapshot.x,
+					y: context.y
+				}
+			});
 		}
 		pageDesc.prevY = Math.max(pageDesc.prevY, data.prevY);
 		pageDesc.y = Math.min(pageDesc.y, data.y);
