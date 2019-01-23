@@ -14662,10 +14662,14 @@ LayoutBuilder.prototype.processRow = function (columns, widths, gaps, tableBody,
 				page: context.page,
 				x: lastSnapshot.x,
 				y: context.y,
+				availableHeight: context.availableHeight,
+				availableWidth: lastSnapshot.availableWidth,
 				bottomMost: {
 					page: context.page,
 					x: lastSnapshot.x,
-					y: context.y
+					y: context.y,
+					availableHeight: context.availableHeight,
+					availableWidth: lastSnapshot.availableWidth
 				}
 			});
 		}
