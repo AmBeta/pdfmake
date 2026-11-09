@@ -7,3 +7,7 @@ doc
 *.ipr
 *.iws
 nbproject
+package-lock.json
+yarn.lock
+/build
+/js

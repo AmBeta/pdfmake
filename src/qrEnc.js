@@ -1,5 +1,6 @@
 /*eslint no-unused-vars: ["error", {"args": "none"}]*/
 /*eslint no-redeclare: "off"*/
+/*eslint no-throw-literal: "off"*/
 
 'use strict';
 /* qr.js -- QR code generator in Javascript (revision 2011-01-19)
@@ -136,7 +137,7 @@ var MASKFUNCS = [
 		return ((i + j) % 2 + (i * j) % 3) % 2 === 0;
 	}];
 
-// returns true when the version information has to be embeded.
+// returns true when the version information has to be embedded.
 var needsverinfo = function (ver) {
 	return ver > 6;
 };
@@ -347,7 +348,7 @@ var encode = function (ver, mode, data, maxbuflen) {
 //
 // this is quite similar to CRC calculation as both Reed-Solomon and CRC use
 // the certain kind of cyclic codes, which is effectively the division of
-// zero-augumented polynomial by the generator polynomial. the only difference
+// zero-augmented polynomial by the generator polynomial. the only difference
 // is that Reed-Solomon uses GF(2^8), instead of CRC's GF(2), and Reed-Solomon
 // uses the different generator polynomial than CRC's.
 var calculateecc = function (poly, genpoly) {
@@ -355,7 +356,7 @@ var calculateecc = function (poly, genpoly) {
 	var polylen = poly.length, genpolylen = genpoly.length;
 	for (var i = 0; i < genpolylen; ++i)
 		modulus.push(0);
-	for (var i = 0; i < polylen; ) {
+	for (var i = 0; i < polylen;) {
 		var quotient = GF256_INVMAP[modulus[i++]];
 		if (quotient >= 0) {
 			for (var j = 0; j < genpolylen; ++j) {
@@ -366,10 +367,10 @@ var calculateecc = function (poly, genpoly) {
 	return modulus.slice(polylen);
 };
 
-// auguments ECC code words to given code words. the resulting words are
+// augments ECC code words to given code words. the resulting words are
 // ready to be encoded in the matrix.
 //
-// the much of actual augumenting procedure follows JIS X 0510:2004 sec 8.7.
+// the much of actual augmenting procedure follows JIS X 0510:2004 sec 8.7.
 // the code is simplified using the fact that the size of each code & ECC
 // blocks is almost same; for example, when we have 4 blocks and 46 data words
 // the number of code words in those blocks are 11, 11, 12, 12 respectively.
@@ -410,7 +411,7 @@ var augumenteccs = function (poly, nblocks, genpoly) {
 	return result;
 };
 
-// auguments BCH(p+q,q) code to the polynomial over GF(2), given the proper
+// augments BCH(p+q,q) code to the polynomial over GF(2), given the proper
 // genpoly. the both input and output are in binary numbers, and unlike
 // calculateecc genpoly should include the 1 bit for the highest degree.
 //
@@ -483,7 +484,7 @@ var makebasematrix = function (ver) {
 		}
 	}
 
-	return {matrix: matrix, reserved: reserved};
+	return { matrix: matrix, reserved: reserved };
 };
 
 // fills the data portion (i.e. unmarked in reserved) of the matrix with given
@@ -544,7 +545,7 @@ var putformatinfo = function (matrix, reserved, ecclevel, mask) {
 // (cf. JIS X 0510:2004 sec 8.8.2)
 //
 // the evaluation procedure tries to avoid the problematic patterns naturally
-// occuring from the original matrix. for example, it penaltizes the patterns
+// occurring from the original matrix. for example, it penaltizes the patterns
 // which just look like the finder pattern which will confuse the decoder.
 // we choose the mask which results in the lowest score among 8 possible ones.
 //
@@ -590,7 +591,7 @@ var evaluatematrix = function (matrix) {
 
 		// evaluate the current row
 		groups = [0]; // the first empty group of white
-		for (var j = 0; j < n; ) {
+		for (var j = 0; j < n;) {
 			var k;
 			for (k = 0; j < n && row[j]; ++k)
 				++j;
@@ -603,7 +604,7 @@ var evaluatematrix = function (matrix) {
 
 		// evaluate the current column
 		groups = [0];
-		for (var j = 0; j < n; ) {
+		for (var j = 0; j < n;) {
 			var k;
 			for (k = 0; j < n && matrix[j][i]; ++k)
 				++j;
@@ -677,10 +678,14 @@ var generate = function (data, ver, mode, ecclevel, mask) {
 //
 
 function generateFrame(data, options) {
-	var MODES = {'numeric': MODE_NUMERIC, 'alphanumeric': MODE_ALPHANUMERIC,
-		'octet': MODE_OCTET};
-	var ECCLEVELS = {'L': ECCLEVEL_L, 'M': ECCLEVEL_M, 'Q': ECCLEVEL_Q,
-		'H': ECCLEVEL_H};
+	var MODES = {
+		'numeric': MODE_NUMERIC, 'alphanumeric': MODE_ALPHANUMERIC,
+		'octet': MODE_OCTET
+	};
+	var ECCLEVELS = {
+		'L': ECCLEVEL_L, 'M': ECCLEVEL_M, 'Q': ECCLEVEL_Q,
+		'H': ECCLEVEL_H
+	};
 
 	options = options || {};
 	var ver = options.version || -1;
@@ -743,11 +748,13 @@ function buildCanvas(data, options) {
 	var canvas = [];
 	var background = options.background || '#fff';
 	var foreground = options.foreground || '#000';
+	var padding = options.padding || 0;
 	//var margin = options.margin || 4;
 	var matrix = generateFrame(data, options);
 	var n = matrix.length;
 	var modSize = Math.floor(options.fit ? options.fit / n : 5);
-	var size = n * modSize;
+	var size = (n * modSize) + (modSize * padding * 2);
+	var paddingXY = modSize * padding;
 
 	canvas.push({
 		type: 'rect',
@@ -759,8 +766,8 @@ function buildCanvas(data, options) {
 			if (matrix[i][j]) {
 				canvas.push({
 					type: 'rect',
-					x: modSize * j,
-					y: modSize * i,
+					x: modSize * j + paddingXY,
+					y: modSize * i + paddingXY,
 					w: modSize,
 					h: modSize,
 					lineWidth: 0,
@@ -784,6 +791,6 @@ function measure(node) {
 	return node;
 }
 
-module.exports = {
+export default {
 	measure: measure
 };

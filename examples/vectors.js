@@ -1,15 +1,19 @@
-var fonts = {
-	Roboto: {
-		normal: 'fonts/Roboto-Regular.ttf',
-		bold: 'fonts/Roboto-Medium.ttf',
-		italics: 'fonts/Roboto-Italic.ttf',
-		bolditalics: 'fonts/Roboto-MediumItalic.ttf'
-	}
-};
+var pdfmake = require('../js/index'); // only during development, otherwise use the following line
+//var pdfmake = require('pdfmake');
 
-var PdfPrinter = require('../src/printer');
-var printer = new PdfPrinter(fonts);
-var fs = require('fs');
+var Roboto = require('../fonts/Roboto');
+pdfmake.addFonts(Roboto);
+
+pdfmake.setUrlAccessPolicy((url) => {
+	// this can be used to restrict allowed domains
+	return url.startsWith('https://');
+});
+
+// eslint-disable-next-line no-unused-vars
+pdfmake.setLocalAccessPolicy((path) => {
+	// this can be used to restrict access to local file system
+	return true;
+});
 
 
 var docDefinition = {
@@ -17,9 +21,9 @@ var docDefinition = {
 		{
 			text: [
 				'This ',
-				{text: 'is', color: 'green'},
+				{ text: 'is', color: 'green' },
 				' the first ',
-				{text: 'paragraph', color: 'red'}
+				{ text: 'paragraph', color: 'red' }
 			]
 		},
 		{
@@ -29,9 +33,9 @@ var docDefinition = {
 					x: 0,
 					y: 0,
 					w: 310,
-					h: 260,
+					h: 290,
 					r: 5,
-					dash: {length: 5},
+					dash: { length: 5 },
 					// lineWidth: 10,
 					lineColor: 'blue',
 				},
@@ -40,7 +44,7 @@ var docDefinition = {
 					x: 1,
 					y: 1,
 					w: 308,
-					h: 258,
+					h: 288,
 					r: 4,
 					lineColor: 'red',
 					color: '#ffffe0',
@@ -49,14 +53,14 @@ var docDefinition = {
 					type: 'polyline',
 					lineWidth: 3,
 					closePath: true,
-					points: [{x: 10, y: 10}, {x: 35, y: 40}, {x: 100, y: 40}, {x: 125, y: 10}]
+					points: [{ x: 10, y: 10 }, { x: 35, y: 40 }, { x: 100, y: 40 }, { x: 125, y: 10 }]
 				},
 				{
 					type: 'polyline',
 					lineWidth: 2,
 					color: 'blue',
 					lineColor: 'red',
-					points: [{x: 10, y: 110}, {x: 35, y: 140}, {x: 100, y: 140}, {x: 125, y: 110}, {x: 10, y: 110}]
+					points: [{ x: 10, y: 110 }, { x: 35, y: 140 }, { x: 100, y: 140 }, { x: 125, y: 110 }, { x: 10, y: 110 }]
 				},
 				{
 					type: 'line',
@@ -106,6 +110,17 @@ var docDefinition = {
 					type: 'rect',
 					x: 10, y: 230, w: 100, h: 10,
 					linearGradient: ['red', 'yellow', 'green', 'blue']
+				},
+				{
+					type: 'ellipse',
+					x: 260, y: 140,
+					r1: 30, r2: 20,
+					linearGradient: ['red', 'green', 'blue', 'red'],
+				},
+				{
+					type: 'rect',
+					x: 10, y: 250, w: 50, h: 30,
+					color: ['stripe45d', 'blue'],
 				}
 			]
 		},
@@ -120,9 +135,22 @@ var docDefinition = {
 	],
 	defaultStyle: {
 		color: 'gray',
+	},
+	patterns: {
+		stripe45d: {
+			boundingBox: [1, 1, 4, 4],
+			xStep: 3,
+			yStep: 3,
+			pattern: '1 w 0 1 m 4 5 l s 2 0 m 5 3 l s'
+		}
 	}
 };
 
-var pdfDoc = printer.createPdfKitDocument(docDefinition);
-pdfDoc.pipe(fs.createWriteStream('pdfs/vectors.pdf'));
-pdfDoc.end();
+var now = new Date();
+
+var pdf = pdfmake.createPdf(docDefinition);
+pdf.write('pdfs/vectors.pdf').then(() => {
+	console.log(new Date() - now);
+}, err => {
+	console.error(err);
+});

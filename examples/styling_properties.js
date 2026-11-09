@@ -1,15 +1,19 @@
-var fonts = {
-	Roboto: {
-		normal: 'fonts/Roboto-Regular.ttf',
-		bold: 'fonts/Roboto-Medium.ttf',
-		italics: 'fonts/Roboto-Italic.ttf',
-		bolditalics: 'fonts/Roboto-MediumItalic.ttf'
-	}
-};
+var pdfmake = require('../js/index'); // only during development, otherwise use the following line
+//var pdfmake = require('pdfmake');
 
-var PdfPrinter = require('../src/printer');
-var printer = new PdfPrinter(fonts);
-var fs = require('fs');
+var Roboto = require('../fonts/Roboto');
+pdfmake.addFonts(Roboto);
+
+pdfmake.setUrlAccessPolicy((url) => {
+	// this can be used to restrict allowed domains
+	return url.startsWith('https://');
+});
+
+// eslint-disable-next-line no-unused-vars
+pdfmake.setLocalAccessPolicy((path) => {
+	// this can be used to restrict access to local file system
+	return true;
+});
 
 
 var docDefinition = {
@@ -25,20 +29,81 @@ var docDefinition = {
 			italics: true
 		},
 		'\n\nFor preserving leading spaces use preserveLeadingSpaces property:',
-		{text: '    This is a paragraph with preserved leading spaces.', preserveLeadingSpaces: true},
-		{text: '{', preserveLeadingSpaces: true},
-		{text: '    "sample": {', preserveLeadingSpaces: true},
-		{text: '        "json": "nested"', preserveLeadingSpaces: true},
-		{text: '    }', preserveLeadingSpaces: true},
-		{text: '}', preserveLeadingSpaces: true},
+		{ text: '    This is a paragraph with preserved leading spaces.', preserveLeadingSpaces: true },
+		{ text: '{', preserveLeadingSpaces: true },
+		{ text: '    "sample": {', preserveLeadingSpaces: true },
+		{ text: '        "json": "nested"', preserveLeadingSpaces: true },
+		{ text: '    }', preserveLeadingSpaces: true },
+		{ text: '}', preserveLeadingSpaces: true },
 		'\n\nfontFeatures property:',
-		{text: 'Hello World 1234567890', fontFeatures: ['smcp']},
-		{text: 'Hello World 1234567890', fontFeatures: ['c2sc']},
-		{text: 'Hello World 1234567890', fontFeatures: ['onum']},
-		{text: 'Hello World 1234567890', fontFeatures: ['onum', 'c2sc']}
-	]
+		{ text: 'Hello World 1234567890', fontFeatures: ['smcp'] },
+		{ text: 'Hello World 1234567890', fontFeatures: ['c2sc'] },
+		{ text: 'Hello World 1234567890', fontFeatures: ['onum'] },
+		{ text: 'Hello World 1234567890', fontFeatures: ['onum', 'c2sc'] },
+		'\n\nText opacity:',
+		{ text: 'Hello World', opacity: 0.8 },
+		{ text: 'Hello World', opacity: 0.6 },
+		{ text: 'Hello World', opacity: 0.4 },
+		{ text: 'Hello World', opacity: 0.2 },
+		{ text: 'Hello World', opacity: 0.1 },
+		'\n\n Subscript, superscript:',
+		{
+			text: [
+				'Hello World.',
+				{
+					text: '1, 2',
+					sup: true,
+				},
+				' Let\'s continue our sentence. Notice the leading space.'
+			]
+		},
+		{
+			text: [
+				'Hello',
+				{
+					text: '1, 2',
+					sub: true,
+				},
+				' World'
+			]
+		},
+		'\n\n',
+		{
+			text: 'Text background pattern', background: ['stripe45d', 'gray']
+		},
+		{
+			text: 'Customize word break:',
+			pageBreak: 'before'
+		},
+		{
+			text: 'DefaultLine\n"BreakBehaviour" "ForATextWithVeryVery" "LongLongWords"',
+			fontSize: 30,
+		},
+		{
+			text: '\n\n',
+			fontSize: 30,
+		},
+		{
+			text: 'BreakAll\n"LineBreakBehaviour" "ForATextWithVeryVery" "LongLongWords"',
+			fontSize: 30,
+			wordBreak: 'break-all',
+		}
+	],
+	patterns: {
+		stripe45d: {
+			boundingBox: [1, 1, 4, 4],
+			xStep: 3,
+			yStep: 3,
+			pattern: '1 w 0 1 m 4 5 l s 2 0 m 5 3 l s'
+		}
+	}
 };
 
-var pdfDoc = printer.createPdfKitDocument(docDefinition);
-pdfDoc.pipe(fs.createWriteStream('pdfs/styling_properties.pdf'));
-pdfDoc.end();
+var now = new Date();
+
+var pdf = pdfmake.createPdf(docDefinition);
+pdf.write('pdfs/styling_properties.pdf').then(() => {
+	console.log(new Date() - now);
+}, err => {
+	console.error(err);
+});
